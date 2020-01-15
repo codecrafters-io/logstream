@@ -100,7 +100,6 @@ func (c *Producer) Close() error {
 
 func (c *Consumer) Read(p []byte) (int, error) {
 	fmt.Println("Read called")
-	time.Sleep(1 * time.Second)
 	cmd := c.redisClient.XRead(&redis.XReadArgs{
 		Streams: []string{c.streamKey, c.lastMessageID},
 		Block:   1 * time.Second,
@@ -127,6 +126,7 @@ func (c *Consumer) Read(p []byte) (int, error) {
 				return 0, io.EOF
 			}
 			readableBytes := []byte(message.Values["bytes"].(string))
+			readableBytes = readableBytes[c.bytesReadOfCurrentMessage:]
 
 			fmt.Printf("Readable: %v, p: %v!\n", len(readableBytes), len(p))
 
