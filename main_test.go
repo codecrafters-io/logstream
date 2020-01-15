@@ -40,7 +40,7 @@ func TestConsumerAndProducer(t *testing.T) {
 }
 
 func TestLargeMessage(t *testing.T) {
-	p, err := NewProducer("redis://localhost:6379", "testKey")
+	p, err := NewProducer("redis://localhost:6379", "testKey2")
 	if err != nil {
 		t.Errorf("Create Producer Error: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestLargeMessage(t *testing.T) {
 
 	fmt.Println("Writing done.")
 
-	c, err := NewConsumer("redis://localhost:6379", "testKey")
+	c, err := NewConsumer("redis://localhost:6379", "testKey2")
 	bytes, err := ioutil.ReadAll(c)
 	if err != nil {
 		t.Errorf("Read Error: %v", err)

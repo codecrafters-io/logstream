@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"time"
 
@@ -20,7 +21,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Streaming logs from/to %s\n", *streamUrl)
+	parts := strings.Split(*streamUrl, "/")
+	streamKey := parts[len(parts)-1]
+	redisUrl := strings.Join(parts[0:len(parts)-1], "/")
+
+	args := flag.Args()
+
+	if args[0] == "follow" {
+		consumer, err := NewConsumer(redisUrl, streamKey)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		bytes, err := io.Copy(os.Stdout, consumer)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Read %d bytes\n", bytes)
+	} else if args[0] == "run" {
+		fmt.Printf("Streaming logs from/to %s\n", *streamUrl)
+	} else {
+		fmt.Printf("Invalid args! %v\n", args)
+	}
 }
 
 type Producer struct {
@@ -99,7 +123,6 @@ func (c *Producer) Close() error {
 }
 
 func (c *Consumer) Read(p []byte) (int, error) {
-	fmt.Println("Read called")
 	cmd := c.redisClient.XRead(&redis.XReadArgs{
 		Streams: []string{c.streamKey, c.lastMessageID},
 		Block:   1 * time.Second,
@@ -107,28 +130,20 @@ func (c *Consumer) Read(p []byte) (int, error) {
 
 	streams, err := cmd.Result()
 	if err == redis.Nil {
-		// Hit timeout
-		fmt.Println("Hit timeout", err)
 		return 0, nil
 	}
 
 	if err != nil {
-		fmt.Printf("Read returns error %v\n", err)
 		return 0, err
 	}
 
 	for _, stream := range streams {
-		fmt.Printf("Found %v messages\n", len(stream.Messages))
 		for _, message := range stream.Messages {
-			fmt.Printf("Message ID: %v\n", message.ID)
 			if message.Values["event_type"].(string) == "disconnect" {
-				fmt.Println("Hit disconnect", err)
 				return 0, io.EOF
 			}
 			readableBytes := []byte(message.Values["bytes"].(string))
 			readableBytes = readableBytes[c.bytesReadOfCurrentMessage:]
-
-			fmt.Printf("Readable: %v, p: %v!\n", len(readableBytes), len(p))
 
 			// When we have lesser than what's asked, perform complete read
 			if len(readableBytes) <= len(p) {
@@ -139,7 +154,6 @@ func (c *Consumer) Read(p []byte) (int, error) {
 				c.lastMessageID = message.ID
 				c.bytesReadOfCurrentMessage = 0
 
-				fmt.Printf("Read %v bytes\n", len(readableBytes))
 				return len(readableBytes), nil
 
 				// readableBytes is greater than len(p). Let's read whatever is possible
@@ -150,12 +164,10 @@ func (c *Consumer) Read(p []byte) (int, error) {
 
 				c.bytesReadOfCurrentMessage += len(p)
 
-				fmt.Printf("Read %v bytes\n", len(p))
 				return len(p), nil
 			}
 		}
 	}
 
-	fmt.Println("Read returns normally")
-	return 8, nil
+	panic("Shouldn't hit this!")
 }
