@@ -1,0 +1,2 @@
+archive:
+  name_template: "{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
