@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"time"
@@ -28,6 +29,7 @@ func main() {
 	args := flag.Args()
 
 	if args[0] == "follow" {
+		fmt.Printf("Consuming logs from/to %s\n", *streamUrl)
 		consumer, err := NewConsumer(redisUrl, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
@@ -41,7 +43,40 @@ func main() {
 		}
 		fmt.Printf("Read %d bytes\n", bytes)
 	} else if args[0] == "run" {
-		fmt.Printf("Streaming logs from/to %s\n", *streamUrl)
+		fmt.Printf("Sending logs to %s\n", *streamUrl)
+		producer, err := NewProducer(redisUrl, streamKey)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		cmd := exec.Command("sh", []string{"-c", strings.Join(args[1:], " ")}...)
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		go func() {
+			io.Copy(io.MultiWriter(producer, os.Stdout), stdout)
+		}()
+
+		go func() {
+			io.Copy(io.MultiWriter(producer, os.Stderr), stderr)
+		}()
+
+		err = cmd.Run()
+		producer.Close()
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
 	} else {
 		fmt.Printf("Invalid args! %v\n", args)
 	}
