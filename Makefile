@@ -4,4 +4,4 @@ next_version_number := $(shell echo $$(($(current_version_number)+1)))
 release:
 	git tag v$(next_version_number)
 	git push origin master
-	goreleaser
+	goreleaser --rm-dist
