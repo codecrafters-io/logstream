@@ -29,21 +29,20 @@ func main() {
 	args := flag.Args()
 
 	if args[0] == "follow" {
-		fmt.Printf("Consuming logs from/to %s\n", *streamUrl)
+		fmt.Printf("Streaming logs...")
 		consumer, err := NewConsumer(redisUrl, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
 		}
 
-		bytes, err := io.Copy(os.Stdout, consumer)
+		_, err = io.Copy(os.Stdout, consumer)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Read %d bytes\n", bytes)
 	} else if args[0] == "run" {
-		fmt.Printf("Sending logs to %s\n", *streamUrl)
+		fmt.Printf("Streaming logs..")
 		producer, err := NewProducer(redisUrl, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
