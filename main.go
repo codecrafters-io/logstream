@@ -62,15 +62,21 @@ func main() {
 			os.Exit(1)
 		}
 
+		ch := make(chan bool)
+
 		go func() {
 			io.Copy(io.MultiWriter(producer, os.Stdout), stdout)
+			ch <- true
 		}()
 
 		go func() {
 			io.Copy(io.MultiWriter(producer, os.Stderr), stderr)
+			ch <- true
 		}()
 
 		err = cmd.Run()
+		<-ch
+		<-ch
 		producer.Close()
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)

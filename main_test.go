@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -10,7 +9,7 @@ import (
 func TestConsumerAndProducer(t *testing.T) {
 	p, err := NewProducer("redis://localhost:6379", "testKey")
 	if err != nil {
-		t.Errorf("Create Producer Error: %v", err)
+		t.Fatalf("Create Producer Error: %v", err)
 	}
 
 	_, err = p.Write([]byte("Here's a "))
@@ -24,8 +23,6 @@ func TestConsumerAndProducer(t *testing.T) {
 	}
 
 	p.Close()
-
-	fmt.Println("Writing done.")
 
 	c, err := NewConsumer("redis://localhost:6379", "testKey")
 	bytes, err := ioutil.ReadAll(c)
@@ -42,7 +39,7 @@ func TestConsumerAndProducer(t *testing.T) {
 func TestLargeMessage(t *testing.T) {
 	p, err := NewProducer("redis://localhost:6379", "testKey2")
 	if err != nil {
-		t.Errorf("Create Producer Error: %v", err)
+		t.Fatalf("Create Producer Error: %v", err)
 	}
 
 	longString := strings.Repeat("a", 10000)
@@ -53,8 +50,6 @@ func TestLargeMessage(t *testing.T) {
 	}
 
 	p.Close()
-
-	fmt.Println("Writing done.")
 
 	c, err := NewConsumer("redis://localhost:6379", "testKey2")
 	bytes, err := ioutil.ReadAll(c)
