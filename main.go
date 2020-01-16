@@ -65,18 +65,31 @@ func main() {
 		ch := make(chan bool)
 
 		go func() {
-			io.Copy(io.MultiWriter(producer, os.Stdout), stdout)
+			_, err := io.Copy(io.MultiWriter(producer, os.Stdout), stdout)
+			if err != nil {
+				fmt.Printf("Stdout Err: %v\n", err)
+				return
+			}
 			ch <- true
 		}()
 
 		go func() {
-			io.Copy(io.MultiWriter(producer, os.Stderr), stderr)
+			_, err := io.Copy(io.MultiWriter(producer, os.Stderr), stderr)
+			if err != nil {
+				fmt.Printf("Stderr Err: %v\n", err)
+				return
+			}
 			ch <- true
 		}()
 
-		err = cmd.Run()
+		err = cmd.Start()
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
 		<-ch
 		<-ch
+		err = cmd.Wait()
 		producer.Close()
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
