@@ -20,3 +20,10 @@ logstream --url=<logstream_url> follow
 ```
 
 The `follow` command exits with the exit code of the process. 
+
+
+# Releasing
+
+``` sh
+make release
+```
