@@ -28,9 +28,18 @@ func main() {
 
 	args := flag.Args()
 
+	opts, err := redis.ParseURL(redisUrl)
+	opts.DialTimeout = time.Second * 30
+	if err != nil {
+		fmt.Printf("Err: %v\n", err)
+		os.Exit(1)
+	}
+
+	redisClient := redis.NewClient(opts)
+
 	if args[0] == "follow" {
 		fmt.Printf("Streaming logs...")
-		consumer, err := NewConsumer(redisUrl, streamKey)
+		consumer, err := NewConsumer(redisClient, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
@@ -43,7 +52,7 @@ func main() {
 		}
 	} else if args[0] == "run" {
 		fmt.Printf("Streaming logs..")
-		producer, err := NewProducer(redisUrl, streamKey)
+		producer, err := NewProducer(redisClient, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
@@ -105,17 +114,10 @@ type Producer struct {
 	streamKey   string
 }
 
-func NewProducer(redisUrl string, streamKey string) (*Producer, error) {
-	opts, err := redis.ParseURL(redisUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	redisClient := redis.NewClient(opts)
-
+func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
 	// Delete the key first
 	cmd := redisClient.Del(streamKey)
-	_, err = cmd.Result()
+	_, err := cmd.Result()
 	if err != nil {
 		return nil, err
 	}
@@ -133,14 +135,9 @@ type Consumer struct {
 	bytesReadOfCurrentMessage int
 }
 
-func NewConsumer(redisUrl string, streamKey string) (*Consumer, error) {
-	opts, err := redis.ParseURL(redisUrl)
-	if err != nil {
-		return nil, err
-	}
-
+func NewConsumer(redisClient *redis.Client, streamKey string) (*Consumer, error) {
 	return &Consumer{
-		redisClient:   redis.NewClient(opts),
+		redisClient:   redisClient,
 		streamKey:     streamKey,
 		lastMessageID: "0",
 	}, nil

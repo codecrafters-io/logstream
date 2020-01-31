@@ -4,10 +4,13 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-redis/redis/v7"
 )
 
 func TestConsumerAndProducer(t *testing.T) {
-	p, err := NewProducer("redis://localhost:6379", "testKey")
+	p, err := NewProducer(redisClient(t), "testKey")
 	if err != nil {
 		t.Fatalf("Create Producer Error: %v", err)
 	}
@@ -24,7 +27,7 @@ func TestConsumerAndProducer(t *testing.T) {
 
 	p.Close()
 
-	c, err := NewConsumer("redis://localhost:6379", "testKey")
+	c, err := NewConsumer(redisClient(t), "testKey")
 	bytes, err := ioutil.ReadAll(c)
 	if err != nil {
 		t.Errorf("Read Error: %v", err)
@@ -37,7 +40,7 @@ func TestConsumerAndProducer(t *testing.T) {
 }
 
 func TestLargeMessage(t *testing.T) {
-	p, err := NewProducer("redis://localhost:6379", "testKey2")
+	p, err := NewProducer(redisClient(t), "testKey2")
 	if err != nil {
 		t.Fatalf("Create Producer Error: %v", err)
 	}
@@ -51,7 +54,7 @@ func TestLargeMessage(t *testing.T) {
 
 	p.Close()
 
-	c, err := NewConsumer("redis://localhost:6379", "testKey2")
+	c, err := NewConsumer(redisClient(t), "testKey2")
 	bytes, err := ioutil.ReadAll(c)
 	if err != nil {
 		t.Errorf("Read Error: %v", err)
@@ -60,4 +63,15 @@ func TestLargeMessage(t *testing.T) {
 	if string(bytes) != longString {
 		t.Errorf("Expected long string, got: %v", string(bytes))
 	}
+}
+
+func redisClient(t *testing.T) *redis.Client {
+	opts, err := redis.ParseURL("redis://localhost:6379/0")
+	opts.DialTimeout = time.Second * 30
+	if err != nil {
+		t.Errorf("Err: %v", err)
+		t.FailNow()
+	}
+
+	return redis.NewClient(opts)
 }
