@@ -38,7 +38,6 @@ func main() {
 	redisClient := redis.NewClient(opts)
 
 	if args[0] == "follow" {
-		fmt.Printf("Streaming logs...")
 		consumer, err := NewConsumer(redisClient, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
@@ -51,7 +50,6 @@ func main() {
 			os.Exit(1)
 		}
 	} else if args[0] == "run" {
-		fmt.Printf("Streaming logs..")
 		producer, err := NewProducer(redisClient, streamKey)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
