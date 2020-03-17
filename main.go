@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"time"
 
@@ -15,12 +16,16 @@ import (
 
 func main() {
 	streamUrl := flag.String("url", "", "A logstream URL. Example: redis://localhost:6379/0/<stream_id>")
+	maxLogSizeMBPtr := flag.Int("max-size-mbs", 2, "Max log size to stream, in MBs. Example: 2")
 	flag.Parse()
 
 	if *streamUrl == "" {
 		fmt.Println("Expected --url to be set!")
 		os.Exit(1)
 	}
+
+	maxLogSizeMB := *maxLogSizeMBPtr
+	maxLogSizeBytes := maxLogSizeMB * 1024 * 1024
 
 	parts := strings.Split(*streamUrl, "/")
 	streamKey := parts[len(parts)-1]
@@ -69,24 +74,32 @@ func main() {
 			os.Exit(1)
 		}
 
-		ch := make(chan bool)
+		readAckChan := make(chan error)
 
 		go func() {
-			_, err := io.Copy(io.MultiWriter(producer, os.Stdout), stdout)
-			if err != nil {
-				fmt.Printf("Stdout Err: %v\n", err)
-				return
+			n, err := io.CopyN(io.MultiWriter(producer, os.Stdout), stdout, int64(maxLogSizeBytes))
+			if err == nil && n == int64(maxLogSizeBytes) {
+				// We exhausted the byte count. EOF!
+				readAckChan <- io.EOF
+			} else if err == io.EOF {
+				// We hit an EOF, this is a successful read.
+				readAckChan <- nil
+			} else {
+				readAckChan <- err
 			}
-			ch <- true
 		}()
 
 		go func() {
-			_, err := io.Copy(io.MultiWriter(producer, os.Stderr), stderr)
-			if err != nil {
-				fmt.Printf("Stderr Err: %v\n", err)
-				return
+			n, err := io.CopyN(io.MultiWriter(producer, os.Stderr), stderr, int64(maxLogSizeBytes))
+			if err == nil && n == int64(maxLogSizeBytes) {
+				// We exhausted the byte count. EOF!
+				readAckChan <- io.EOF
+			} else if err == io.EOF {
+				// We hit an EOF, this is a successful read.
+				readAckChan <- nil
+			} else {
+				readAckChan <- err
 			}
-			ch <- true
 		}()
 
 		err = cmd.Start()
@@ -94,12 +107,26 @@ func main() {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
 		}
-		<-ch
-		<-ch
-		err = cmd.Wait()
-		producer.Close()
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
+		for i := 0; i < 2; i++ {
+			if err = <-readAckChan; err != nil {
+				if err == io.EOF {
+					producer.Write([]byte(fmt.Sprintf("\n---\nLogs exceeded limit of %dMB, might be truncated.\n---\n", maxLogSizeMB)))
+					cmd.Process.Signal(syscall.SIGTERM)
+				} else {
+					producer.Write([]byte(fmt.Sprintf("\nError when reading logs: %v.\n", err)))
+				}
+			}
+		}
+		cmdErr := cmd.Wait()
+
+		closeErr := producer.Close()
+		if closeErr != nil {
+			fmt.Printf("Close err: %v\n", closeErr)
+			os.Exit(1)
+		}
+
+		if cmdErr != nil {
+			fmt.Printf("Cmd Err: %v\n", cmdErr)
 			os.Exit(1)
 		}
 	} else {
