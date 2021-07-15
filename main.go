@@ -15,6 +15,14 @@ import (
 )
 
 func main() {
+	isDebug := os.Getenv("LOGSTREAM_DEBUG") == "true"
+
+	logDebug := func(message string) {
+		if (isDebug) {
+			fmt.Println(message)
+		}
+	}
+
 	streamUrl := flag.String("url", "", "A logstream URL. Example: redis://localhost:6379/0/<stream_id>")
 	maxLogSizeMBPtr := flag.Int("max-size-mbs", 2, "Max log size to stream, in MBs. Example: 2")
 	flag.Parse()
@@ -43,12 +51,14 @@ func main() {
 	redisClient := redis.NewClient(opts)
 
 	if args[0] == "follow" {
-		consumer, err := NewConsumer(redisClient, streamKey)
+		logDebug("creating consumer")
+		consumer, err := NewConsumer(redisClient, streamKey, logDebug)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
 		}
 
+		logDebug("created consumer, initiating io.Copy")
 		_, err = io.Copy(os.Stdout, consumer)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
@@ -157,14 +167,16 @@ type Consumer struct {
 	redisClient               *redis.Client
 	streamKey                 string
 	lastMessageID             string
+	logDebug                  func(string)
 	bytesReadOfCurrentMessage int
 }
 
-func NewConsumer(redisClient *redis.Client, streamKey string) (*Consumer, error) {
+func NewConsumer(redisClient *redis.Client, streamKey string, logDebug func(string)) (*Consumer, error) {
 	return &Consumer{
 		redisClient:   redisClient,
 		streamKey:     streamKey,
 		lastMessageID: "0",
+		logDebug: logDebug,
 	}, nil
 }
 
@@ -198,6 +210,7 @@ func (c *Producer) Close() error {
 }
 
 func (c *Consumer) Read(p []byte) (int, error) {
+	c.logDebug("Consumer.Read() called")
 	cmd := c.redisClient.XRead(&redis.XReadArgs{
 		Streams: []string{c.streamKey, c.lastMessageID},
 		Block:   1 * time.Second,
@@ -205,13 +218,16 @@ func (c *Consumer) Read(p []byte) (int, error) {
 
 	streams, err := cmd.Result()
 	if err == redis.Nil {
+		c.logDebug("-> received nil response.")
 		return 0, nil
 	}
 
 	if err != nil {
+		c.logDebug("-> received err.")
 		return 0, err
 	}
 
+	c.logDebug("-> reading streams")
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
 			if message.Values["event_type"].(string) == "disconnect" {
@@ -229,9 +245,10 @@ func (c *Consumer) Read(p []byte) (int, error) {
 				c.lastMessageID = message.ID
 				c.bytesReadOfCurrentMessage = 0
 
+				c.logDebug("  -> read entire stream into buffer")
 				return len(readableBytes), nil
 
-				// readableBytes is greater than len(p). Let's read whatever is possible
+			// readableBytes is greater than len(p). Let's read whatever is possible
 			} else {
 				for i, _ := range p {
 					p[i] = readableBytes[i]
@@ -239,6 +256,7 @@ func (c *Consumer) Read(p []byte) (int, error) {
 
 				c.bytesReadOfCurrentMessage += len(p)
 
+				c.logDebug("  -> read partial stream into buffer (stream length greater than buffer)")
 				return len(p), nil
 			}
 		}
