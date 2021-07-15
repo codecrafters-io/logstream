@@ -213,7 +213,7 @@ func (c *Consumer) Read(p []byte) (int, error) {
 	c.logDebug("Consumer.Read() called")
 	cmd := c.redisClient.XRead(&redis.XReadArgs{
 		Streams: []string{c.streamKey, c.lastMessageID},
-		Block:   1 * time.Second,
+		Block:   5 * time.Second,
 	})
 
 	streams, err := cmd.Result()
