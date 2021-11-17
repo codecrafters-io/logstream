@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -91,6 +92,7 @@ func main() {
 			if err == nil && n == int64(maxLogSizeBytes) {
 				// We exhausted the byte count. EOF!
 				readAckChan <- io.EOF
+				io.Copy(ioutil.Discard, stderr) // If anything is remaining, drain
 			} else if err == io.EOF {
 				// We hit an EOF, this is a successful read.
 				readAckChan <- nil
@@ -104,6 +106,7 @@ func main() {
 			if err == nil && n == int64(maxLogSizeBytes) {
 				// We exhausted the byte count. EOF!
 				readAckChan <- io.EOF
+				io.Copy(ioutil.Discard, stderr) // If anything is remaining, drain
 			} else if err == io.EOF {
 				// We hit an EOF, this is a successful read.
 				readAckChan <- nil
