@@ -14,5 +14,8 @@ install:
 test_produce_local: install
 	logstream -url=redis://localhost:6379/0/abcd run echo hey
 
+test_produce_large: install
+	logstream -url=redis://localhost:6379/0/abcd run test_helpers/large_echo.sh
+
 test_consume_local: install
 	logstream -url=redis://localhost:6379/0/abcd follow
