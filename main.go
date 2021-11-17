@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
-
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -92,7 +90,7 @@ func main() {
 			if err == nil && n == int64(maxLogSizeBytes) {
 				// We exhausted the byte count. EOF!
 				readAckChan <- io.EOF
-				io.Copy(ioutil.Discard, stderr) // If anything is remaining, drain
+				io.Copy(ioutil.Discard, stdout) // If anything is remaining, drain
 			} else if err == io.EOF {
 				// We hit an EOF, this is a successful read.
 				readAckChan <- nil
@@ -124,7 +122,6 @@ func main() {
 			if err = <-readAckChan; err != nil {
 				if err == io.EOF {
 					producer.Write([]byte(fmt.Sprintf("\n---\nLogs exceeded limit of %dMB, might be truncated.\n---\n", maxLogSizeMB)))
-					cmd.Process.Signal(syscall.SIGTERM)
 				} else {
 					producer.Write([]byte(fmt.Sprintf("\nError when reading logs: %v.\n", err)))
 				}
