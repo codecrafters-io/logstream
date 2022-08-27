@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -10,14 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 )
+
+var ctx = context.Background()
 
 func main() {
 	isDebug := os.Getenv("LOGSTREAM_DEBUG") == "true"
 
 	logDebug := func(message string) {
-		if (isDebug) {
+		if isDebug {
 			fmt.Println(message)
 		}
 	}
@@ -151,7 +154,7 @@ type Producer struct {
 
 func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
 	// Delete the key first
-	cmd := redisClient.Del(streamKey)
+	cmd := redisClient.Del(ctx, streamKey)
 	_, err := cmd.Result()
 	if err != nil {
 		return nil, err
@@ -176,12 +179,12 @@ func NewConsumer(redisClient *redis.Client, streamKey string, logDebug func(stri
 		redisClient:   redisClient,
 		streamKey:     streamKey,
 		lastMessageID: "0",
-		logDebug: logDebug,
+		logDebug:      logDebug,
 	}, nil
 }
 
 func (c *Producer) Write(p []byte) (int, error) {
-	cmd := c.redisClient.XAdd(&redis.XAddArgs{
+	cmd := c.redisClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: c.streamKey,
 		ID:     "*", // Maybe we can do better than this?
 		Values: map[string]interface{}{
@@ -198,7 +201,7 @@ func (c *Producer) Write(p []byte) (int, error) {
 }
 
 func (c *Producer) Close() error {
-	cmd := c.redisClient.XAdd(&redis.XAddArgs{
+	cmd := c.redisClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: c.streamKey,
 		ID:     "*", // Maybe we can do better than this?
 		Values: map[string]interface{}{
@@ -211,7 +214,7 @@ func (c *Producer) Close() error {
 
 func (c *Consumer) Read(p []byte) (int, error) {
 	c.logDebug("Consumer.Read() called")
-	cmd := c.redisClient.XRead(&redis.XReadArgs{
+	cmd := c.redisClient.XRead(ctx, &redis.XReadArgs{
 		Streams: []string{c.streamKey, c.lastMessageID},
 		Block:   5 * time.Second,
 	})
@@ -248,7 +251,7 @@ func (c *Consumer) Read(p []byte) (int, error) {
 				c.logDebug("  -> read entire stream into buffer")
 				return len(readableBytes), nil
 
-			// readableBytes is greater than len(p). Let's read whatever is possible
+				// readableBytes is greater than len(p). Let's read whatever is possible
 			} else {
 				for i, _ := range p {
 					p[i] = readableBytes[i]
