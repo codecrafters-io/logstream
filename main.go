@@ -167,13 +167,6 @@ type Producer struct {
 }
 
 func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
-	// Only delete if last element is exitCode
-	cmd := redisClient.Del(ctx, streamKey)
-	_, err := cmd.Result()
-	if err != nil {
-		return nil, err
-	}
-
 	return &Producer{
 		redisClient: redisClient,
 		streamKey:   streamKey,
