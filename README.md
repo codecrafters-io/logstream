@@ -21,6 +21,11 @@ logstream --url=<logstream_url> follow
 
 The `follow` command exits with the exit code of the process. 
 
+To append logs but not terminate the stream:
+
+```sh
+echo "hey" | logstream --url=<logstream_url> append
+```
 
 # Releasing
 

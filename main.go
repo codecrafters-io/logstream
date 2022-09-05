@@ -138,8 +138,22 @@ func main() {
 			os.Exit(1)
 		}
 
-		if cmdErr != nil {
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode()) // The program exited with a non-zero exit code
+		} else if cmdErr != nil {
 			fmt.Printf("Cmd Err: %v\n", cmdErr)
+			os.Exit(1)
+		}
+	} else if args[0] == "append" {
+		producer, err := NewProducer(redisClient, streamKey)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		_, err = io.Copy(producer, os.Stdin)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
@@ -153,13 +167,6 @@ type Producer struct {
 }
 
 func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
-	// Delete the key first
-	cmd := redisClient.Del(ctx, streamKey)
-	_, err := cmd.Result()
-	if err != nil {
-		return nil, err
-	}
-
 	return &Producer{
 		redisClient: redisClient,
 		streamKey:   streamKey,
