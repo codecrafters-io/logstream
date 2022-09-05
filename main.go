@@ -138,7 +138,9 @@ func main() {
 			os.Exit(1)
 		}
 
-		if cmdErr != nil {
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode()) // The program exited with a non-zero exit code
+		} else if cmdErr != nil {
 			fmt.Printf("Cmd Err: %v\n", cmdErr)
 			os.Exit(1)
 		}
@@ -165,7 +167,7 @@ type Producer struct {
 }
 
 func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
-	// Delete the key first
+	// Only delete if last element is exitCode
 	cmd := redisClient.Del(ctx, streamKey)
 	_, err := cmd.Result()
 	if err != nil {
