@@ -142,6 +142,18 @@ func main() {
 			fmt.Printf("Cmd Err: %v\n", cmdErr)
 			os.Exit(1)
 		}
+	} else if args[0] == "append" {
+		producer, err := NewProducer(redisClient, streamKey)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
+
+		_, err = io.Copy(producer, os.Stdin)
+		if err != nil {
+			fmt.Printf("Err: %v\n", err)
+			os.Exit(1)
+		}
 	} else {
 		fmt.Printf("Invalid args! %v\n", args)
 	}
