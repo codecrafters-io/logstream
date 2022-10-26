@@ -37,11 +37,7 @@ func main() {
 	maxLogSizeMB := *maxLogSizeMBPtr
 	maxLogSizeBytes := maxLogSizeMB * 1024 * 1024
 
-	parts := strings.Split(*streamUrl, "/")
-	streamKey := parts[len(parts)-1]
-	redisUrl := strings.Join(parts[0:len(parts)-1], "/")
-
-	args := flag.Args()
+	redisUrl, streamKey := parseUrl(*streamUrl)
 
 	opts, err := redis.ParseURL(redisUrl)
 	opts.DialTimeout = time.Second * 30
@@ -51,6 +47,8 @@ func main() {
 	}
 
 	redisClient := redis.NewClient(opts)
+
+	args := flag.Args()
 
 	if args[0] == "follow" {
 		logDebug("creating consumer")
@@ -273,4 +271,11 @@ func (c *Consumer) Read(p []byte) (int, error) {
 	}
 
 	panic("Shouldn't hit this!")
+}
+
+func parseUrl(streamUrl string) (redisUrl string, streamKey string) {
+	parts := strings.Split(streamUrl, "/")
+	streamKey = parts[len(parts)-1]
+	redisUrl = strings.Join(parts[0:len(parts)-1], "/")
+	return
 }
