@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/codecrafters-io/logstream/consumer"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestConsumerAndProducer(t *testing.T) {
 
 	p.Close()
 
-	c, err := NewConsumer("redis://localhost:6379/0/testKey", func(_ string) {})
+	c, err := consumer.NewConsumer("redis://localhost:6379/0/testKey", func(_ string) {})
 	bytes, err := ioutil.ReadAll(c)
 	if err != nil {
 		t.Errorf("Read Error: %v", err)
@@ -54,7 +55,7 @@ func TestLargeMessage(t *testing.T) {
 
 	p.Close()
 
-	c, err := NewConsumer("redis://localhost:6379/0/testKey2", func(_ string) {})
+	c, err := consumer.NewConsumer("redis://localhost:6379/0/testKey2", func(_ string) {})
 	bytes, err := ioutil.ReadAll(c)
 	if err != nil {
 		t.Errorf("Read Error: %v", err)
