@@ -52,7 +52,7 @@ func main() {
 
 	if args[0] == "follow" {
 		logDebug("creating consumer")
-		consumer, err := NewConsumer(redisClient, streamKey, logDebug)
+		consumer, err := NewConsumer(*streamUrl, logDebug)
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
 			os.Exit(1)
@@ -179,9 +179,18 @@ type Consumer struct {
 	bytesReadOfCurrentMessage int
 }
 
-func NewConsumer(redisClient *redis.Client, streamKey string, logDebug func(string)) (*Consumer, error) {
+func NewConsumer(streamUrl string, logDebug func(string)) (*Consumer, error) {
+	redisUrl, streamKey := parseUrl(streamUrl)
+
+	opts, err := redis.ParseURL(redisUrl)
+	opts.DialTimeout = time.Second * 30
+	if err != nil {
+		fmt.Printf("Err: %v\n", err)
+		return &Consumer{}, err
+	}
+
 	return &Consumer{
-		redisClient:   redisClient,
+		redisClient:   redis.NewClient(opts),
 		streamKey:     streamKey,
 		lastMessageID: "0",
 		logDebug:      logDebug,
