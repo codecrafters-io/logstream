@@ -25,3 +25,6 @@ test_produce_large: install
 
 test_consume_local: install
 	logstream -url=redis://localhost:6379/0/abcd follow
+
+test_colors: install
+	logstream -url=redis://localhost:6379/0/abcd run echo "\033[31mError\033[0m"
