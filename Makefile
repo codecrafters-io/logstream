@@ -28,3 +28,6 @@ test_consume_local: install
 
 test_colors: install
 	logstream -url=redis://localhost:6379/0/abcd run echo "\033[31mError\033[0m"
+
+test_quotes: install
+	logstream -url=redis://localhost:6379/0/abcd run echo "this isn't okay"
