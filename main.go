@@ -4,15 +4,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/codecrafters-io/logstream/consumer"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+
+	"github.com/codecrafters-io/logstream/consumer"
 )
 
 var ctx = context.Background()
@@ -72,7 +74,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		cmd := exec.Command("sh", []string{"-c", strings.Join(args[1:], " ")}...)
+		for i := 1; i < len(args); i++ {
+			args[i] = strconv.Quote(args[i])
+		}
+
+		cmd := exec.Command("sh", "-c", strings.Join(args[1:], " "))
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			fmt.Printf("Err: %v\n", err)
