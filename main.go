@@ -42,8 +42,9 @@ func main() {
 				Name:  "url",
 				Usage: "a logstream URL. Example: redis://localhost:6379/0/<stream_id>",
 			},
-			&cli.IntFlag{
+			&cli.Float64Flag{
 				Name:  "max-size-mbs",
+				Value: 2,
 				Usage: "max log size to stream, in MBs. Example: 2",
 			},
 			cli.HelpFlag,
@@ -111,15 +112,15 @@ func run(c *cli.Context) (err error) {
 
 	var producer io.Writer = r
 
-	if lim := c.Int("max-size-mbs"); lim != 0 {
-		lw := LimitedWriter{
+	if lim := c.Float64("max-size-mbs"); lim != 0 {
+		lw := &LimitedWriter{
 			Writer: r,
-			Limit:  lim * 1024 * 1024,
+			Limit:  int(lim * 1024 * 1024),
 		}
 
 		defer lw.Close()
 
-		producer = &lw
+		producer = lw
 	}
 
 	cmd := execBash(c)

@@ -14,6 +14,7 @@ type LimitedWriter struct {
 
 func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 	if w.consumed >= w.Limit {
+		w.consumed += len(p)
 		return len(p), nil
 	}
 

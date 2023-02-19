@@ -15,6 +15,7 @@ type (
 		*Redis
 
 		lastMessageID string
+		eofReached    bool
 
 		readbuf  []byte
 		consumed int
@@ -33,12 +34,16 @@ func NewConsumer(url string) (*Consumer, error) {
 	}, nil
 }
 
-func (r *Consumer) Read(p []byte) (int, error) {
-	n := copy(p, r.readbuf[r.consumed:])
+func (r *Consumer) Read(p []byte) (n int, err error) {
+	n = copy(p, r.readbuf[r.consumed:])
 	r.consumed += n
 
 	if n != 0 {
-		return n, nil
+		if r.eofReached && r.consumed == len(r.readbuf) {
+			return n, io.EOF
+		}
+
+		return n, err
 	}
 
 	r.consumed = 0
@@ -59,11 +64,9 @@ func (r *Consumer) Read(p []byte) (int, error) {
 		return 0, fmt.Errorf("redis: xread: %w", err)
 	}
 
-	disconnected := false
-
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			if disconnected {
+			if r.eofReached {
 				return 0, fmt.Errorf("message after disconnect: %v", msg)
 			}
 
@@ -73,7 +76,7 @@ func (r *Consumer) Read(p []byte) (int, error) {
 			}
 
 			if ev == "disconnect" {
-				disconnected = true
+				r.eofReached = true
 				continue
 			}
 
@@ -97,7 +100,7 @@ func (r *Consumer) Read(p []byte) (int, error) {
 		}
 	}
 
-	if disconnected {
+	if r.eofReached && r.consumed == len(r.readbuf) {
 		return n, io.EOF
 	}
 
