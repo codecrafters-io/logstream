@@ -38,11 +38,7 @@ func (r *Consumer) Read(p []byte) (n int, err error) {
 	n = copy(p, r.readbuf[r.consumed:])
 	r.consumed += n
 
-	if n != 0 {
-		if r.eofReached && r.consumed == len(r.readbuf) {
-			return n, io.EOF
-		}
-
+	if err = r.eof(); n != 0 || err != nil {
 		return n, err
 	}
 
@@ -64,12 +60,9 @@ func (r *Consumer) Read(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("redis: xread: %w", err)
 	}
 
+streams:
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			if r.eofReached {
-				return 0, fmt.Errorf("message after disconnect: %v", msg)
-			}
-
 			ev, ok := msg.Values["event_type"].(string)
 			if !ok {
 				return 0, fmt.Errorf("no event_type in message: %v", msg)
@@ -77,7 +70,8 @@ func (r *Consumer) Read(p []byte) (n int, err error) {
 
 			if ev == "disconnect" {
 				r.eofReached = true
-				continue
+
+				break streams
 			}
 
 			if ev != "log" {
@@ -100,9 +94,13 @@ func (r *Consumer) Read(p []byte) (n int, err error) {
 		}
 	}
 
+	return n, r.eof()
+}
+
+func (r *Consumer) eof() error {
 	if r.eofReached && r.consumed == len(r.readbuf) {
-		return n, io.EOF
+		return io.EOF
 	}
 
-	return n, nil
+	return nil
 }
