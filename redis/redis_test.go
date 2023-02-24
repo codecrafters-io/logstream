@@ -2,6 +2,7 @@ package redis
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -11,7 +12,10 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/go-redis/redismock/v8"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+var redisFlag = flag.String("redis", "", "redis url")
 
 func TestNewProducerConsumer(t *testing.T) {
 	p, err := NewProducer("redis://somehost/1/streamkey")
@@ -85,4 +89,37 @@ func TestProduceConsume(t *testing.T) {
 	assert.Equal(t, expected, data.String())
 
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestProduceConsumeEnd2End(t *testing.T) {
+	if *redisFlag == "" {
+		t.Skip("no redis url provided")
+	}
+
+	p, err := NewProducer(*redisFlag)
+	require.NoError(t, err)
+
+	c, err := NewConsumer(*redisFlag)
+	require.NoError(t, err)
+
+	for _, msg := range []string{"first_message", "second_message"} {
+		_, err = fmt.Fprintf(p, "%s\n", msg)
+		assert.NoError(t, err)
+	}
+
+	err = p.Close()
+	require.NoError(t, err)
+
+	expected := `first_message
+second_message
+`
+
+	var data bytes.Buffer
+	bufsize := 5
+
+	_, err = io.CopyBuffer(&data,
+		io.LimitReader(c, 1000),
+		make([]byte, bufsize))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(expected), data.Bytes())
 }

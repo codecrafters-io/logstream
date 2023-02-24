@@ -127,12 +127,12 @@ func run(c *cli.Context) (err error) {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("new redis client: %w", err)
+		return fmt.Errorf("get stdout pipe: %w", err)
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("new redis client: %w", err)
+		return fmt.Errorf("get stderr pipe: %w", err)
 	}
 
 	errc := make(chan error, 2)
