@@ -16,3 +16,10 @@ jobs:
 
       - name: Test
         run: go test -cover -v ./...
+
+      - name: Redis End-to-End Test
+        run: go test -v ./redis -redis redis://redis/0/abcd
+
+    services:
+      redis:
+        image: redis
