@@ -20,6 +20,9 @@ jobs:
       - name: Redis End-to-End Test
         run: go test -v ./redis -redis redis://localhost/0/abcd
 
+      - name: Full End-to-End Tests
+        run: REDIS=redis://localhost/1 ./test_helpers/end2end.sh
+
     services:
       redis:
         image: redis
