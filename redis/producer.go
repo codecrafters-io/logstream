@@ -1,5 +1,7 @@
 package redis
 
+import "fmt"
+
 type (
 	Producer struct {
 		*Redis
@@ -24,8 +26,16 @@ func (r *Producer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (r *Producer) Close() error {
-	_ = r.xadd("event_type", "disconnect")
+func (r *Producer) Close() (err error) {
+	e := r.xadd("event_type", "disconnect")
+	if err == nil && e != nil {
+		err = fmt.Errorf("send disconnect event: %w", e)
+	}
 
-	return r.Redis.Close()
+	e = r.Redis.Close()
+	if err == nil && e != nil {
+		err = e
+	}
+
+	return err
 }

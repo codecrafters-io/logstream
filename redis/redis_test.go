@@ -51,6 +51,12 @@ func TestProduceConsume(t *testing.T) {
 		assert.Equal(t, len(msg)+1, n)
 	}
 
+	mock.ExpectXAdd(&redis.XAddArgs{
+		Stream: stream,
+		ID:     "*",
+		Values: []string{"event_type", "disconnect"},
+	}).SetVal("OK")
+
 	err := p.Close()
 	assert.NoError(t, err)
 
