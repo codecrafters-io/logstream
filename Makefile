@@ -11,23 +11,23 @@ test:
 install:
 	go install .
 
-test_produce_local: install
-	logstream -url=redis://localhost:6379/0/abcd run echo hey
+test_produce_local:
+	go run . -url=redis://localhost:6379/0/abcd run echo hey
 
-test_produce_local_exit_1: install
-	logstream -url=redis://localhost:6379/0/abcd run test_helpers/exit_1.sh
+test_produce_local_exit_1:
+	go run . -url=redis://localhost:6379/0/abcd run test_helpers/exit_1.sh
 
-test_append_local: install
-	echo "test append" | logstream -url=redis://localhost:6379/0/abcd append
+test_append_local:
+	echo "test append" | go run . -url=redis://localhost:6379/0/abcd append
 
-test_produce_large: install
-	logstream -url=redis://localhost:6379/0/abcd run test_helpers/large_echo.sh
+test_produce_large:
+	go run . -url=redis://localhost:6379/0/abcd run test_helpers/large_echo.sh
 
-test_consume_local: install
-	logstream -url=redis://localhost:6379/0/abcd follow
+test_consume_local:
+	go run . -url=redis://localhost:6379/0/abcd follow
 
-test_colors: install
-	logstream -url=redis://localhost:6379/0/abcd run echo "\033[31mError\033[0m"
+test_colors:
+	go run . -url=redis://localhost:6379/0/abcd run test_helpers/color_output.sh
 
-test_quotes: install
-	logstream -url=redis://localhost:6379/0/abcd run echo "this isn't okay"
+test_quotes:
+	go run . -url=redis://localhost:6379/0/abcd run echo "this isn't okay"

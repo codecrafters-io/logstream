@@ -1,215 +1,194 @@
 package main
 
 import (
-	"context"
-	"flag"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/urfave/cli/v2"
 
-	"github.com/codecrafters-io/logstream/consumer"
+	"github.com/codecrafters-io/logstream/redis"
 )
 
-var ctx = context.Background()
-
 func main() {
-	isDebug := os.Getenv("LOGSTREAM_DEBUG") == "true"
-
-	logDebug := func(message string) {
-		if isDebug {
-			fmt.Println(message)
-		}
+	followCmd := &cli.Command{
+		Name:   "follow",
+		Action: follow,
 	}
 
-	streamUrl := flag.String("url", "", "A logstream URL. Example: redis://localhost:6379/0/<stream_id>")
-	maxLogSizeMBPtr := flag.Int("max-size-mbs", 2, "Max log size to stream, in MBs. Example: 2")
-	flag.Parse()
-
-	if *streamUrl == "" {
-		fmt.Println("Expected --url to be set!")
-		os.Exit(1)
+	runCmd := &cli.Command{
+		Name:   "run",
+		Action: run,
 	}
 
-	maxLogSizeMB := *maxLogSizeMBPtr
-	maxLogSizeBytes := maxLogSizeMB * 1024 * 1024
-
-	redisUrl, streamKey := parseUrl(*streamUrl)
-
-	opts, err := redis.ParseURL(redisUrl)
-	opts.DialTimeout = time.Second * 30
-	if err != nil {
-		fmt.Printf("Err: %v\n", err)
-		os.Exit(1)
+	appendCmd := &cli.Command{
+		Name:   "append",
+		Action: appendRun,
 	}
 
-	redisClient := redis.NewClient(opts)
-
-	args := flag.Args()
-
-	if args[0] == "follow" {
-		logDebug("creating consumer")
-		consumer, err := consumer.NewConsumer(*streamUrl, logDebug)
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-
-		logDebug("created consumer, initiating io.Copy")
-		_, err = io.Copy(os.Stdout, consumer)
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-	} else if args[0] == "run" {
-		producer, err := NewProducer(redisClient, streamKey)
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-
-		for i := 1; i < len(args); i++ {
-			args[i] = strconv.Quote(args[i])
-		}
-
-		cmd := exec.Command("sh", "-c", strings.Join(args[1:], " "))
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-
-		stderr, err := cmd.StderrPipe()
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-
-		readAckChan := make(chan error)
-
-		go func() {
-			n, err := io.CopyN(io.MultiWriter(producer, os.Stdout), stdout, int64(maxLogSizeBytes))
-			if err == nil && n == int64(maxLogSizeBytes) {
-				// We exhausted the byte count. EOF!
-				readAckChan <- io.EOF
-				io.Copy(ioutil.Discard, stdout) // If anything is remaining, drain
-			} else if err == io.EOF {
-				// We hit an EOF, this is a successful read.
-				readAckChan <- nil
-			} else {
-				readAckChan <- err
-			}
-		}()
-
-		go func() {
-			n, err := io.CopyN(io.MultiWriter(producer, os.Stderr), stderr, int64(maxLogSizeBytes))
-			if err == nil && n == int64(maxLogSizeBytes) {
-				// We exhausted the byte count. EOF!
-				readAckChan <- io.EOF
-				io.Copy(ioutil.Discard, stderr) // If anything is remaining, drain
-			} else if err == io.EOF {
-				// We hit an EOF, this is a successful read.
-				readAckChan <- nil
-			} else {
-				readAckChan <- err
-			}
-		}()
-
-		err = cmd.Start()
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-		for i := 0; i < 2; i++ {
-			if err = <-readAckChan; err != nil {
-				if err == io.EOF {
-					producer.Write([]byte(fmt.Sprintf("\n---\nLogs exceeded limit of %dMB, might be truncated.\n---\n", maxLogSizeMB)))
-				} else {
-					producer.Write([]byte(fmt.Sprintf("\nError when reading logs: %v.\n", err)))
-				}
-			}
-		}
-		cmdErr := cmd.Wait()
-
-		closeErr := producer.Close()
-		if closeErr != nil {
-			fmt.Printf("Close err: %v\n", closeErr)
-			os.Exit(1)
-		}
-
-		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode()) // The program exited with a non-zero exit code
-		} else if cmdErr != nil {
-			fmt.Printf("Cmd Err: %v\n", cmdErr)
-			os.Exit(1)
-		}
-	} else if args[0] == "append" {
-		producer, err := NewProducer(redisClient, streamKey)
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-
-		_, err = io.Copy(producer, os.Stdin)
-		if err != nil {
-			fmt.Printf("Err: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		fmt.Printf("Invalid args! %v\n", args)
-	}
-}
-
-type Producer struct {
-	redisClient *redis.Client
-	streamKey   string
-}
-
-func NewProducer(redisClient *redis.Client, streamKey string) (*Producer, error) {
-	return &Producer{
-		redisClient: redisClient,
-		streamKey:   streamKey,
-	}, nil
-}
-
-func (c *Producer) Write(p []byte) (int, error) {
-	cmd := c.redisClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: c.streamKey,
-		ID:     "*", // Maybe we can do better than this?
-		Values: map[string]interface{}{
-			"event_type": "log",
-			"bytes":      string(p),
+	app := &cli.App{
+		Name: "logstream",
+		Commands: []*cli.Command{
+			followCmd,
+			runCmd,
+			appendCmd,
 		},
-	})
-	_, err := cmd.Result()
-	if err != nil {
-		return 0, err
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "url",
+				Usage: "a logstream URL. Example: redis://localhost:6379/0/<stream_id>",
+			},
+			&cli.Float64Flag{
+				Name:  "max-size-mbs",
+				Value: 2,
+				Usage: "max log size to stream, in MBs. Example: 2",
+			},
+			cli.HelpFlag,
+			cli.BashCompletionFlag,
+		},
 	}
 
-	return len(p), nil
+	app.RunAndExitOnError()
 }
 
-func (c *Producer) Close() error {
-	cmd := c.redisClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: c.streamKey,
-		ID:     "*", // Maybe we can do better than this?
-		Values: map[string]interface{}{
-			"event_type": "disconnect",
-		},
-	})
-	_, err := cmd.Result()
-	return err
+func follow(c *cli.Context) (err error) {
+	r, err := redis.NewConsumer(c.String("url"))
+	if err != nil {
+		return fmt.Errorf("new redis client: %w", err)
+	}
+
+	defer func() {
+		e := r.Close()
+		if err == nil && e != nil {
+			err = fmt.Errorf("close redis: %w", e)
+		}
+	}()
+
+	_, err = io.Copy(os.Stdout, r)
+	if err != nil {
+		return fmt.Errorf("read stream: %w", err)
+	}
+
+	return nil
 }
 
-func parseUrl(streamUrl string) (redisUrl string, streamKey string) {
-	parts := strings.Split(streamUrl, "/")
-	streamKey = parts[len(parts)-1]
-	redisUrl = strings.Join(parts[0:len(parts)-1], "/")
-	return
+func appendRun(c *cli.Context) (err error) {
+	r, err := redis.NewProducer(c.String("url"))
+	if err != nil {
+		return fmt.Errorf("new redis client: %w", err)
+	}
+
+	defer func() {
+		e := r.Close()
+		if err == nil && e != nil {
+			err = fmt.Errorf("close redis: %w", e)
+		}
+	}()
+
+	_, err = io.Copy(r, os.Stdin)
+	if err != nil {
+		return fmt.Errorf("write stream: %w", err)
+	}
+
+	return nil
+}
+
+func run(c *cli.Context) (err error) {
+	r, err := redis.NewProducer(c.String("url"))
+	if err != nil {
+		return fmt.Errorf("new redis client: %w", err)
+	}
+
+	defer func() {
+		e := r.Close()
+		if err == nil && e != nil {
+			err = fmt.Errorf("close redis: %w", e)
+		}
+	}()
+
+	var producer io.Writer = r
+
+	if lim := c.Float64("max-size-mbs"); lim != 0 {
+		lw := &LimitedWriter{
+			Writer: r,
+			Limit:  int(lim * 1024 * 1024),
+		}
+
+		defer lw.Close()
+
+		producer = lw
+	}
+
+	cmd := execBash(c)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("get stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("get stderr pipe: %w", err)
+	}
+
+	errc := make(chan error, 2)
+
+	go copier("stdout", io.MultiWriter(producer, os.Stdout), stdout, errc)
+	go copier("stderr", io.MultiWriter(producer, os.Stdout), stderr, errc)
+
+	err = cmd.Start()
+	if err != nil {
+		return fmt.Errorf("start cmd: %w", err)
+	}
+
+	defer func() {
+		e := cmd.Wait()
+		if err == nil && e != nil {
+			err = fmt.Errorf("wait for cmd: %w", e)
+		}
+
+		var code *exec.ExitError
+		if errors.As(err, &code) {
+			_, _ = fmt.Fprintf(r, "\n---\nCommand exit status: %v\n", code.ExitCode())
+		}
+	}()
+
+	err = <-errc
+	if err != nil {
+		return
+	}
+
+	err = <-errc
+	if err != nil {
+		return
+	}
+
+	return nil
+}
+
+func copier(name string, w io.Writer, r io.Reader, errc chan error) {
+	_, err := io.Copy(w, r)
+	if err != nil {
+		err = fmt.Errorf("%v: %w", name, err)
+	}
+
+	errc <- err
+}
+
+func execBash(c *cli.Context) *exec.Cmd {
+	args := c.Args().Slice()
+
+	for i := range args {
+		args[i] = strconv.Quote(args[i])
+	}
+
+	return exec.Command("bash", "-c", strings.Join(args, " "))
+}
+
+func execNative(c *cli.Context) *exec.Cmd {
+	return exec.Command(c.Args().First(), c.Args().Tail()...)
 }
