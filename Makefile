@@ -1,9 +1,9 @@
-current_version_number := $(shell git tag --list "v*" | sort -V | tail -n 1 | cut -c 2-)
-next_version_number := $(shell echo $$(($(current_version_number)+1)))
+current_patch_number := $(shell git tag --list "v0.2.*" | sort -V | tail -n 1 | cut -c 6-)
+next_patch_number := $(shell echo $$(($(current_patch_number)+1)))
 
 release:
-	git tag v$(next_version_number)
-	git push origin master v$(next_version_number)
+	git tag v0.2.$(next_patch_number)
+	git push origin master v0.2.$(next_patch_number)
 
 test:
 	REDIS_URL=redis://localhost:6379/testing go test -v ./...
