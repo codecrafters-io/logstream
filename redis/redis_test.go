@@ -2,9 +2,9 @@ package redis
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var redisFlag = flag.String("redis", "", "redis url")
+var redisFlag = os.Getenv("REDIS_URL")
 
 func TestNewProducerConsumer(t *testing.T) {
 	p, err := NewProducer("redis://somehost/1/streamkey")
@@ -98,14 +98,14 @@ func TestProduceConsume(t *testing.T) {
 }
 
 func TestProduceConsumeEnd2End(t *testing.T) {
-	if *redisFlag == "" {
-		t.Skip("no redis url provided")
+	if redisFlag == "" {
+		t.Fatal("no redis url provided")
 	}
 
-	p, err := NewProducer(*redisFlag)
+	p, err := NewProducer(redisFlag)
 	require.NoError(t, err)
 
-	c, err := NewConsumer(*redisFlag)
+	c, err := NewConsumer(redisFlag)
 	require.NoError(t, err)
 
 	for _, msg := range []string{"first_message", "second_message"} {

@@ -6,7 +6,7 @@ release:
 	git push origin master v$(next_version_number)
 
 test:
-	go test -v
+	REDIS_URL=redis://localhost:6379/testing go test -v ./...
 
 install:
 	go install .

@@ -24,6 +24,10 @@ func newRedis(urlStream string) (*Redis, error) {
 
 	fs := strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })
 
+	if len(fs) == 1 {
+		fs = []string{"0", fs[0]} // Default db is 0
+	}
+
 	if len(fs) != 2 {
 		return nil, fmt.Errorf("url path must be /db/stream_id")
 	}
