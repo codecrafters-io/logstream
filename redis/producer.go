@@ -2,11 +2,9 @@ package redis
 
 import "fmt"
 
-type (
-	Producer struct {
-		*Redis
-	}
-)
+type Producer struct {
+	*Redis
+}
 
 func NewProducer(url string) (*Producer, error) {
 	r, err := newRedis(url)
