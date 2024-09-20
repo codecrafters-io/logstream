@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var redisFlag = os.Getenv("REDIS_URL")
+var redisUrl = os.Getenv("REDIS_URL")
 
 func TestNewProducerConsumer(t *testing.T) {
 	_, err := NewProducer("redis://somehost/1/streamkey")
@@ -111,14 +112,17 @@ func TestProduceConsume(t *testing.T) {
 }
 
 func TestProduceConsumeEnd2End(t *testing.T) {
-	if redisFlag == "" {
+	if redisUrl == "" {
 		t.Fatal("no redis url provided")
 	}
 
-	p, err := NewProducer(redisFlag)
+	streamKey := fmt.Sprintf("test-stream-%d", rand.Uint64())
+	streamUrl := fmt.Sprintf("%s/%s", redisUrl, streamKey)
+
+	p, err := NewProducer(streamUrl)
 	require.NoError(t, err)
 
-	c, err := NewConsumer(redisFlag)
+	c, err := NewConsumer(streamUrl)
 	require.NoError(t, err)
 
 	for _, msg := range []string{"first_message", "second_message"} {
@@ -129,16 +133,10 @@ func TestProduceConsumeEnd2End(t *testing.T) {
 	err = p.Close()
 	require.NoError(t, err)
 
-	expected := `first_message
-second_message
-`
+	expected := "first_message\nsecond_message\n"
+	data := bytes.NewBuffer([]byte{})
 
-	var data bytes.Buffer
-	bufsize := 5
-
-	_, err = io.CopyBuffer(&data,
-		io.LimitReader(c, 1000),
-		make([]byte, bufsize))
+	_, err = io.Copy(data, c)
 	assert.NoError(t, err)
 	assert.Equal(t, []byte(expected), data.Bytes())
 }

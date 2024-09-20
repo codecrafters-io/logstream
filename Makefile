@@ -6,7 +6,7 @@ release:
 	git push origin main v0.2.$(next_patch_number)
 
 test:
-	REDIS_URL=redis://localhost:6379/testing go test -v ./...
+	REDIS_URL=redis://localhost:6379/0 go test -v ./...
 
 install:
 	go install .
