@@ -67,11 +67,11 @@ function both_equal {
 	dir="$1"
 
 	diff "$dir/original" "$dir/runned" || {
-		echo "runned data differs from original"
+		echo "output of 'logstream run' differs from original"
 		return 1
 	}
 	diff "$dir/runned" "$dir/follow" || {
-		echo "follow data differs from runned"
+		echo "output of 'logstream follow' differs from original"
 		return 1
 	}
 }
