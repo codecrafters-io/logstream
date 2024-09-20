@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/go-redis/redismock/v8"
+	"github.com/rohitpaulk/asyncwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,11 +38,7 @@ func TestProduceConsume(t *testing.T) {
 	c, err := NewConsumer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
 
-	if p, ok := p.(*RedisWriter); ok {
-		p.client = &redisClient{client: r, stream: stream}
-	} else {
-		t.Fatal("p is not a RedisWriter")
-	}
+	p.writer = asyncwriter.New(&RedisWriter{client: &redisClient{client: r, stream: stream}})
 
 	if c, ok := c.(*Consumer); ok {
 		c.redisClient = &redisClient{client: r, stream: stream}
