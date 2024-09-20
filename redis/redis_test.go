@@ -14,7 +14,6 @@ import (
 	"github.com/go-redis/redismock/v8"
 	"github.com/rohitpaulk/asyncwriter"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var redisUrl = os.Getenv("REDIS_URL")
@@ -117,18 +116,21 @@ func TestProduceConsumeEnd2End(t *testing.T) {
 	streamUrl := fmt.Sprintf("%s/%s", redisUrl, streamKey)
 
 	p, err := NewProducer(streamUrl)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	c, err := NewConsumer(streamUrl)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	for _, msg := range []string{"first_message", "second_message"} {
 		_, err = fmt.Fprintf(p, "%s\n", msg)
 		assert.NoError(t, err)
 	}
 
+	err = p.Flush()
+	assert.NoError(t, err)
+
 	err = p.Close()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	expected := "first_message\nsecond_message\n"
 	data := bytes.NewBuffer([]byte{})

@@ -8,6 +8,8 @@ require (
 	github.com/urfave/cli/v2 v2.24.4
 )
 
+replace github.com/rohitpaulk/asyncwriter => ../asyncwriter
+
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
