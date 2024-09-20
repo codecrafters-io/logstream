@@ -20,11 +20,11 @@ var redisFlag = os.Getenv("REDIS_URL")
 func TestNewProducerConsumer(t *testing.T) {
 	p, err := NewProducer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, p.stream, "streamkey")
+	assert.Equal(t, p.redis.stream, "streamkey")
 
 	c, err := NewConsumer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, c.stream, "streamkey")
+	assert.Equal(t, c.redis.stream, "streamkey")
 }
 
 func TestProduceConsume(t *testing.T) {
@@ -32,8 +32,8 @@ func TestProduceConsume(t *testing.T) {
 
 	stream := "abcd"
 
-	p := Producer{Redis: &Redis{client: r, stream: stream}}
-	c := Consumer{Redis: &Redis{client: r, stream: stream}}
+	p := Producer{redis: &Redis{client: r, stream: stream}}
+	c := Consumer{redis: &Redis{client: r, stream: stream}}
 
 	msgs := []string{"some message", "another message", "third"}
 
