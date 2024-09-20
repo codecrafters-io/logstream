@@ -107,7 +107,9 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
-	var limitedWriter io.Writer = p
+	defer p.Flush() // Ensure this happens before Close
+
+	var limitedWriter io.WriteCloser = p
 
 	if lim := c.Float64("max-size-mbs"); lim != 0 {
 		lw := &LimitedWriter{
@@ -115,10 +117,10 @@ func run(c *cli.Context) error {
 			Limit:  int(lim * 1024 * 1024),
 		}
 
-		defer lw.Close()
-
 		limitedWriter = lw
 	}
+
+	defer limitedWriter.Close()
 
 	cmd := execBash(c)
 
