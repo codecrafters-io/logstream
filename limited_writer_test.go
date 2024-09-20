@@ -21,10 +21,8 @@ func TestLimitedWriter(t *testing.T) {
 		assert.Equal(t, i+1, n)
 	}
 
-	assert.Equal(t, `mmemessmes`, buf.String())
-
+	assert.Equal(t, "mmemessmes\n---\nLogs exceeded limit of 0.0 MB.\n", buf.String())
 	err := w.Close()
 	assert.NoError(t, err)
-
-	assert.Contains(t, buf.String(), "\n---\nLogs exceeded limit")
+	assert.Equal(t, "mmemessmes\n---\nLogs exceeded limit of 0.0 MB.\n0.0 MB truncated\n", buf.String())
 }

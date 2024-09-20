@@ -77,103 +77,100 @@ func follow(c *cli.Context) (err error) {
 }
 
 func appendRun(c *cli.Context) (err error) {
-	r, err := redis.NewProducer(c.String("url"))
+	p, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
 	defer func() {
-		e := r.Close()
+		e := p.Close()
 		if err == nil && e != nil {
 			err = fmt.Errorf("close redis: %w", e)
 		}
 	}()
 
-	_, err = io.Copy(r, os.Stdin)
+	_, err = io.Copy(p, os.Stdin)
 	if err != nil {
 		return fmt.Errorf("write stream: %w", err)
+	}
+
+	if err = p.Flush(); err != nil {
+		return fmt.Errorf("flush: %w", err)
 	}
 
 	return nil
 }
 
-func run(c *cli.Context) (err error) {
-	r, err := redis.NewProducer(c.String("url"))
+func run(c *cli.Context) error {
+	p, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
-	defer func() {
-		e := r.Close()
-		if err == nil && e != nil {
-			err = fmt.Errorf("close redis: %w", e)
-		}
-	}()
+	defer p.Flush() // Ensure this happens before Close
 
-	var producer io.Writer = r
+	var limitedWriter io.WriteCloser = p
 
 	if lim := c.Float64("max-size-mbs"); lim != 0 {
 		lw := &LimitedWriter{
-			Writer: r,
+			Writer: p,
 			Limit:  int(lim * 1024 * 1024),
 		}
 
-		defer lw.Close()
-
-		producer = lw
+		limitedWriter = lw
 	}
+
+	defer limitedWriter.Close()
 
 	cmd := execBash(c)
 
-	stdout, err := cmd.StdoutPipe()
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("get stdout pipe: %w", err)
 	}
 
-	stderr, err := cmd.StderrPipe()
+	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("get stderr pipe: %w", err)
 	}
 
 	errc := make(chan error, 2)
 
-	go copier("stdout", io.MultiWriter(producer, os.Stdout), stdout, errc)
-	go copier("stderr", io.MultiWriter(producer, os.Stdout), stderr, errc)
+	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdoutPipe, errc)
+	go copier("stderr", io.MultiWriter(limitedWriter, os.Stdout), stderrPipe, errc)
 
-	err = cmd.Start()
-	if err != nil {
-		return fmt.Errorf("start cmd: %w", err)
+	startErr := cmd.Start()
+	if startErr != nil {
+		return fmt.Errorf("start cmd: %w", startErr)
 	}
 
-	defer func() {
-		e := cmd.Wait()
-		if err == nil && e != nil {
-			err = fmt.Errorf("wait for cmd: %w", e)
-		}
+	// Streams
+	streamErr1 := <-errc
+	streamErr2 := <-errc
 
-		var code *exec.ExitError
-		if errors.As(err, &code) {
-			_, _ = fmt.Fprintf(r, "\n---\nCommand exit status: %v\n", code.ExitCode())
-		}
-	}()
+	waitErr := cmd.Wait()
 
-	err = <-errc
-	if err != nil {
-		return
+	var code *exec.ExitError
+	if errors.As(waitErr, &code) {
+		_, _ = fmt.Fprintf(p, "\n---\nCommand exit status: %v\n", code.ExitCode())
+		p.Flush() // Best effort
 	}
 
-	err = <-errc
-	if err != nil {
-		return
+	if streamErr1 != nil {
+		return streamErr1
 	}
 
-	return nil
+	if streamErr2 != nil {
+		return streamErr2
+	}
+
+	return waitErr
 }
 
 func copier(name string, w io.Writer, r io.Reader, errc chan error) {
 	_, err := io.Copy(w, r)
 	if err != nil {
-		err = fmt.Errorf("%v: %w", name, err)
+		err = fmt.Errorf("%v stream: %w", name, err)
 	}
 
 	errc <- err
