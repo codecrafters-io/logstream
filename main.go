@@ -107,14 +107,7 @@ func run(c *cli.Context) (err error) {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
-	defer func() {
-		e := p.Close()
-		if err == nil && e != nil {
-			err = fmt.Errorf("close redis: %w", e)
-		}
-	}()
-
-	var producer io.Writer = p
+	var limitedWriter io.Writer = p
 
 	if lim := c.Float64("max-size-mbs"); lim != 0 {
 		lw := &LimitedWriter{
@@ -124,7 +117,7 @@ func run(c *cli.Context) (err error) {
 
 		defer lw.Close()
 
-		producer = lw
+		limitedWriter = lw
 	}
 
 	cmd := execBash(c)
@@ -141,8 +134,8 @@ func run(c *cli.Context) (err error) {
 
 	errc := make(chan error, 2)
 
-	go copier("stdout", io.MultiWriter(producer, os.Stdout), stdout, errc)
-	go copier("stderr", io.MultiWriter(producer, os.Stdout), stderr, errc)
+	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdout, errc)
+	go copier("stderr", io.MultiWriter(limitedWriter, os.Stderr), stderr, errc)
 
 	err = cmd.Start()
 	if err != nil {
@@ -161,14 +154,16 @@ func run(c *cli.Context) (err error) {
 		}
 	}()
 
+	// Stdout
 	err = <-errc
 	if err != nil {
 		return
 	}
 
+	// Stderr
 	err = <-errc
 	if err != nil {
-		return
+		return err
 	}
 
 	if err = p.Flush(); err != nil {
