@@ -6,7 +6,7 @@ REDIS=${REDIS:-redis://localhost/0}
 
 function wrap {
 	local stream errout
-	errout=`mktemp`
+	errout=$(mktemp)
 	stream="$1"
 	shift
 
@@ -29,8 +29,8 @@ function follow {
 # usage: tester_function command...
 function run_test {
 	local tmp stream test_fn
-	tmp=`mktemp -d`
-	stream=`basename "$tmp"`
+	tmp=$(mktemp -d)
+	stream=$(basename "$tmp")
 	test_fn="$1"
 	shift
 
@@ -43,8 +43,12 @@ function run_test {
 	"$test_fn" "$tmp"
 
 	code=$?
-
-	test "$code" -eq 0 && echo "ok" || echo "failed"
+	if [ "$code" -ne 0 ]; then
+		echo "failed"
+		exit 1
+	else
+		echo "ok"
+	fi
 
 	return $code
 }
@@ -62,28 +66,52 @@ function both_equal {
 	local dir
 	dir="$1"
 
-	diff "$dir/original" "$dir/runned" || { echo "runned data differs from original"; return 1; }
-	diff "$dir/runned" "$dir/follow" || { echo "follow data differs from runned"; return 1; }
+	diff "$dir/original" "$dir/runned" || {
+		echo "runned data differs from original"
+		return 1
+	}
+	diff "$dir/runned" "$dir/follow" || {
+		echo "follow data differs from runned"
+		return 1
+	}
 }
 
 function exit_1 {
 	local dir size
 	dir="$1"
 
-	diff "$dir/original" "$dir/runned" || { echo "runned data differs from original"; return 1; }
+	diff "$dir/original" "$dir/runned" || {
+		echo "runned data differs from original"
+		return 1
+	}
 
-	size=`wc -c "$dir/runned" | awk '{print $1}'`
-	diffsize "$size" "$dir/runned" "$dir/follow" || { echo "part of the output is lost"; return 1; }
-	grep -q "exit status" "$dir/follow" || { echo "no command exit status message found in follow"; return 1; }
+	size=$(wc -c "$dir/runned" | awk '{print $1}')
+	diffsize "$size" "$dir/runned" "$dir/follow" || {
+		echo "part of the output is lost"
+		return 1
+	}
+	grep -q "exit status" "$dir/follow" || {
+		echo "no command exit status message found in follow"
+		return 1
+	}
 }
 
 function output_limited {
 	local dir
 	dir="$1"
 
-	diff "$dir/original" "$dir/runned" || { echo "runned data differs from original"; return 1; }
-	diffsize 1000 "$dir/runned" "$dir/follow" || { echo "first 1000 bytes of runned and follow differs"; return 1; }
-	grep -q "Logs exceeded limit" "$dir/follow" || { echo "no truncation warning found in follow"; return 1; }
+	diff "$dir/original" "$dir/runned" || {
+		echo "runned data differs from original"
+		return 1
+	}
+	diffsize 1000 "$dir/runned" "$dir/follow" || {
+		echo "first 1000 bytes of runned and follow differs"
+		return 1
+	}
+	grep -q "Logs exceeded limit" "$dir/follow" || {
+		echo "no truncation warning found in follow"
+		return 1
+	}
 }
 
 if [ "$#" -eq 0 ]; then
