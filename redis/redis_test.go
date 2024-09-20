@@ -14,6 +14,7 @@ import (
 	"github.com/go-redis/redismock/v8"
 	"github.com/rohitpaulk/asyncwriter"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var redisUrl = os.Getenv("REDIS_URL")
@@ -32,10 +33,10 @@ func TestProduceConsume(t *testing.T) {
 	stream := "abcd"
 
 	p, err := NewProducer("redis://somehost/1/streamkey")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	c, err := NewConsumer("redis://somehost/1/streamkey")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	p.writer = asyncwriter.New(&RedisWriter{client: &redisClient{client: r, stream: stream}})
 
@@ -45,7 +46,7 @@ func TestProduceConsume(t *testing.T) {
 		t.Fatal("c is not a Consumer")
 	}
 
-	msgs := []string{"some message", "another message", "third"}
+	msgs := []string{"message one", "message 2", "message three"}
 
 	// produce
 
@@ -57,8 +58,11 @@ func TestProduceConsume(t *testing.T) {
 		}).SetVal("OK")
 
 		n, err := p.Write([]byte(msg + "\n"))
-		assert.NoError(t, err)
-		assert.Equal(t, len(msg)+1, n)
+		require.NoError(t, err)
+		require.Equal(t, len(msg)+1, n)
+
+		// Sleep so that batched writes aren't sent in the same XADD call
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	mock.ExpectXAdd(&redis.XAddArgs{
@@ -67,8 +71,11 @@ func TestProduceConsume(t *testing.T) {
 		Values: []string{"event_type", "disconnect"},
 	}).SetVal("OK")
 
+	err = p.Flush()
+	require.NoError(t, err)
+
 	err = p.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// consume
 
