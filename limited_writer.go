@@ -34,23 +34,32 @@ func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 	w.written += n
 
 	if w.consumed > w.Limit {
-		w.ensureWarningWritten()
+		w.ensureExceededLimitWarningWritten()
 	}
 
 	return len(p), err
 }
 
-func (w *LimitedWriter) ensureWarningWritten() {
+func (w *LimitedWriter) ensureExceededLimitWarningWritten() {
 	if w.hasWrittenWarning {
 		return
 	}
 
 	const MB = 1024 * 1024
-	_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB. %.1f MB truncated\n", float64(w.Limit)/MB, float64(w.consumed-w.Limit)/MB)
+	_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB.\n", float64(w.Limit)/MB)
 	w.hasWrittenWarning = true
 }
 
+func (w *LimitedWriter) ensureTruncatedAmountWritten() {
+	const MB = 1024 * 1024
+	_, _ = fmt.Fprintf(w.Writer, "%.1f MB truncated\n", float64(w.consumed-w.Limit)/MB)
+}
+
 func (w *LimitedWriter) Close() (err error) {
+	if w.consumed > w.Limit {
+		w.ensureTruncatedAmountWritten()
+	}
+
 	if closer, ok := w.Writer.(io.Closer); ok {
 		return closer.Close()
 	}
