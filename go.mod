@@ -5,7 +5,7 @@ go 1.22.4
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-redis/redismock/v8 v8.11.5
-	github.com/rohitpaulk/asyncwriter v0.0.0-20240920124313-2ce456b61fdc
+	github.com/rohitpaulk/asyncwriter v0.0.1
 	github.com/stretchr/testify v1.8.1
 	github.com/urfave/cli/v2 v2.24.4
 )
