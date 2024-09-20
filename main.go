@@ -101,7 +101,7 @@ func appendRun(c *cli.Context) (err error) {
 	return nil
 }
 
-func run(c *cli.Context) (err error) {
+func run(c *cli.Context) error {
 	p, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
@@ -137,46 +137,33 @@ func run(c *cli.Context) (err error) {
 	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdout, errc)
 	go copier("stderr", io.MultiWriter(limitedWriter, os.Stderr), stderr, errc)
 
-	err = cmd.Start()
-	if err != nil {
-		return fmt.Errorf("start cmd: %w", err)
+	runErr := cmd.Start()
+
+	// Streams
+	streamErr1 := <-errc
+	streamErr2 := <-errc
+
+	var code *exec.ExitError
+	if errors.As(runErr, &code) {
+		_, _ = fmt.Fprintf(p, "\n---\nCommand exit status: %v\n", code.ExitCode())
+		p.Flush() // Best effort
 	}
 
-	defer func() {
-		e := cmd.Wait()
-		if err == nil && e != nil {
-			err = fmt.Errorf("wait for cmd: %w", e)
-		}
-
-		var code *exec.ExitError
-		if errors.As(err, &code) {
-			_, _ = fmt.Fprintf(p, "\n---\nCommand exit status: %v\n", code.ExitCode())
-		}
-	}()
-
-	// Stdout
-	err = <-errc
-	if err != nil {
-		return
+	if streamErr1 != nil {
+		return streamErr1
 	}
 
-	// Stderr
-	err = <-errc
-	if err != nil {
-		return err
+	if streamErr2 != nil {
+		return streamErr2
 	}
 
-	if err = p.Flush(); err != nil {
-		return fmt.Errorf("flush: %w", err)
-	}
-
-	return nil
+	return runErr
 }
 
 func copier(name string, w io.Writer, r io.Reader, errc chan error) {
 	_, err := io.Copy(w, r)
 	if err != nil {
-		err = fmt.Errorf("%v: %w", name, err)
+		err = fmt.Errorf("%v stream: %w", name, err)
 	}
 
 	errc <- err
