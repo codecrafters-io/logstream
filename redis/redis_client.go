@@ -9,14 +9,12 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-type (
-	Redis struct {
-		client *redis.Client
-		stream string
-	}
-)
+type redisClient struct {
+	client *redis.Client
+	stream string
+}
 
-func newRedis(urlStream string) (*Redis, error) {
+func newRedisClient(urlStream string) (*redisClient, error) {
 	u, err := url.Parse(urlStream)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
@@ -50,7 +48,7 @@ func newRedis(urlStream string) (*Redis, error) {
 		return nil, fmt.Errorf("parse url: %w", err)
 	}
 
-	r := &Redis{
+	r := &redisClient{
 		client: redis.NewClient(opts),
 		stream: fs[1],
 	}
@@ -58,7 +56,7 @@ func newRedis(urlStream string) (*Redis, error) {
 	return r, nil
 }
 
-func (r *Redis) xadd(values ...string) error {
+func (r *redisClient) xadd(values ...string) error {
 	ctx := context.Background()
 
 	cmd := r.client.XAdd(ctx, &redis.XAddArgs{
@@ -75,4 +73,6 @@ func (r *Redis) xadd(values ...string) error {
 	return nil
 }
 
-func (r *Redis) Close() error { return r.client.Close() }
+func (r *redisClient) close() error {
+	return r.client.Close()
+}

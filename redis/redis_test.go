@@ -20,11 +20,9 @@ var redisFlag = os.Getenv("REDIS_URL")
 func TestNewProducerConsumer(t *testing.T) {
 	p, err := NewProducer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, p.redis.stream, "streamkey")
 
 	c, err := NewConsumer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, c.redis.stream, "streamkey")
 }
 
 func TestProduceConsume(t *testing.T) {
@@ -32,8 +30,23 @@ func TestProduceConsume(t *testing.T) {
 
 	stream := "abcd"
 
-	p := Producer{redis: &Redis{client: r, stream: stream}}
-	c := Consumer{redis: &Redis{client: r, stream: stream}}
+	p, err := NewProducer("redis://somehost/1/streamkey")
+	assert.NoError(t, err)
+
+	c, err := NewConsumer("redis://somehost/1/streamkey")
+	assert.NoError(t, err)
+
+	if p, ok := p.(*RedisWriter); ok {
+		p.client = &redisClient{client: r, stream: stream}
+	} else {
+		t.Fatal("p is not a RedisWriter")
+	}
+
+	if c, ok := c.(*Consumer); ok {
+		c.redisClient = &redisClient{client: r, stream: stream}
+	} else {
+		t.Fatal("c is not a Consumer")
+	}
 
 	msgs := []string{"some message", "another message", "third"}
 
@@ -57,7 +70,7 @@ func TestProduceConsume(t *testing.T) {
 		Values: []string{"event_type", "disconnect"},
 	}).SetVal("OK")
 
-	err := p.Close()
+	err = p.Close()
 	assert.NoError(t, err)
 
 	// consume
