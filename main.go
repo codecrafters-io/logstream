@@ -137,7 +137,7 @@ func run(c *cli.Context) error {
 	errc := make(chan error, 2)
 
 	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdoutPipe, errc)
-	go copier("stderr", io.MultiWriter(limitedWriter, os.Stderr), stderrPipe, errc)
+	go copier("stderr", io.MultiWriter(limitedWriter, os.Stdout), stderrPipe, errc)
 
 	startErr := cmd.Start()
 	if startErr != nil {
