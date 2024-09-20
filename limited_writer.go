@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+const MB = 1024 * 1024
+
 type LimitedWriter struct {
 	Writer            io.Writer
 	Limit             int
@@ -15,6 +17,7 @@ type LimitedWriter struct {
 
 func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 	if w.consumed >= w.Limit {
+		w.consumed += len(p)
 		return len(p), nil
 	}
 
@@ -41,17 +44,14 @@ func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *LimitedWriter) ensureExceededLimitWarningWritten() {
-	if w.hasWrittenWarning {
-		return
+	if !w.hasWrittenWarning {
+		_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB.\n", float64(w.Limit)/MB)
+		w.hasWrittenWarning = true
 	}
 
-	const MB = 1024 * 1024
-	_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB.\n", float64(w.Limit)/MB)
-	w.hasWrittenWarning = true
 }
 
 func (w *LimitedWriter) ensureTruncatedAmountWritten() {
-	const MB = 1024 * 1024
 	_, _ = fmt.Fprintf(w.Writer, "%.1f MB truncated\n", float64(w.consumed-w.Limit)/MB)
 }
 
