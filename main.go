@@ -77,44 +77,48 @@ func follow(c *cli.Context) (err error) {
 }
 
 func appendRun(c *cli.Context) (err error) {
-	r, err := redis.NewProducer(c.String("url"))
+	p, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
 	defer func() {
-		e := r.Close()
+		e := p.Close()
 		if err == nil && e != nil {
 			err = fmt.Errorf("close redis: %w", e)
 		}
 	}()
 
-	_, err = io.Copy(r, os.Stdin)
+	_, err = io.Copy(p, os.Stdin)
 	if err != nil {
 		return fmt.Errorf("write stream: %w", err)
+	}
+
+	if err = p.Flush(); err != nil {
+		return fmt.Errorf("flush: %w", err)
 	}
 
 	return nil
 }
 
 func run(c *cli.Context) (err error) {
-	r, err := redis.NewProducer(c.String("url"))
+	p, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
 	}
 
 	defer func() {
-		e := r.Close()
+		e := p.Close()
 		if err == nil && e != nil {
 			err = fmt.Errorf("close redis: %w", e)
 		}
 	}()
 
-	var producer io.Writer = r
+	var producer io.Writer = p
 
 	if lim := c.Float64("max-size-mbs"); lim != 0 {
 		lw := &LimitedWriter{
-			Writer: r,
+			Writer: p,
 			Limit:  int(lim * 1024 * 1024),
 		}
 
@@ -153,7 +157,7 @@ func run(c *cli.Context) (err error) {
 
 		var code *exec.ExitError
 		if errors.As(err, &code) {
-			_, _ = fmt.Fprintf(r, "\n---\nCommand exit status: %v\n", code.ExitCode())
+			_, _ = fmt.Fprintf(p, "\n---\nCommand exit status: %v\n", code.ExitCode())
 		}
 	}()
 
@@ -165,6 +169,10 @@ func run(c *cli.Context) (err error) {
 	err = <-errc
 	if err != nil {
 		return
+	}
+
+	if err = p.Flush(); err != nil {
+		return fmt.Errorf("flush: %w", err)
 	}
 
 	return nil
