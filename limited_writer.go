@@ -15,12 +15,6 @@ type LimitedWriter struct {
 
 func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 	if w.consumed >= w.Limit {
-		if !w.hasWrittenWarning {
-			const MB = 1024 * 1024
-			_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB. %.1f MB truncated\n", float64(w.Limit)/MB, float64(w.consumed-w.Limit)/MB)
-			w.hasWrittenWarning = true
-		}
-
 		return len(p), nil
 	}
 
@@ -39,7 +33,21 @@ func (w *LimitedWriter) Write(p []byte) (n int, err error) {
 	n, err = w.Writer.Write(p[:lim])
 	w.written += n
 
+	if w.consumed > w.Limit {
+		w.ensureWarningWritten()
+	}
+
 	return len(p), err
+}
+
+func (w *LimitedWriter) ensureWarningWritten() {
+	if w.hasWrittenWarning {
+		return
+	}
+
+	const MB = 1024 * 1024
+	_, _ = fmt.Fprintf(w.Writer, "\n---\nLogs exceeded limit of %.1f MB. %.1f MB truncated\n", float64(w.Limit)/MB, float64(w.consumed-w.Limit)/MB)
+	w.hasWrittenWarning = true
 }
 
 func (w *LimitedWriter) Close() (err error) {
