@@ -122,29 +122,34 @@ func run(c *cli.Context) error {
 
 	cmd := execBash(c)
 
-	stdout, err := cmd.StdoutPipe()
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("get stdout pipe: %w", err)
 	}
 
-	stderr, err := cmd.StderrPipe()
+	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("get stderr pipe: %w", err)
 	}
 
 	errc := make(chan error, 2)
 
-	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdout, errc)
-	go copier("stderr", io.MultiWriter(limitedWriter, os.Stderr), stderr, errc)
+	go copier("stdout", io.MultiWriter(limitedWriter, os.Stdout), stdoutPipe, errc)
+	go copier("stderr", io.MultiWriter(limitedWriter, os.Stderr), stderrPipe, errc)
 
-	runErr := cmd.Start()
+	startErr := cmd.Start()
+	if startErr != nil {
+		return fmt.Errorf("start cmd: %w", startErr)
+	}
 
 	// Streams
 	streamErr1 := <-errc
 	streamErr2 := <-errc
 
+	waitErr := cmd.Wait()
+
 	var code *exec.ExitError
-	if errors.As(runErr, &code) {
+	if errors.As(waitErr, &code) {
 		_, _ = fmt.Fprintf(p, "\n---\nCommand exit status: %v\n", code.ExitCode())
 		p.Flush() // Best effort
 	}
@@ -157,7 +162,7 @@ func run(c *cli.Context) error {
 		return streamErr2
 	}
 
-	return runErr
+	return waitErr
 }
 
 func copier(name string, w io.Writer, r io.Reader, errc chan error) {
