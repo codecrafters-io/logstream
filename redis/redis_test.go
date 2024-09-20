@@ -18,13 +18,11 @@ import (
 var redisFlag = os.Getenv("REDIS_URL")
 
 func TestNewProducerConsumer(t *testing.T) {
-	p, err := NewProducer("redis://somehost/1/streamkey")
+	_, err := NewProducer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, p.stream, "streamkey")
 
-	c, err := NewConsumer("redis://somehost/1/streamkey")
+	_, err = NewConsumer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
-	assert.Equal(t, c.stream, "streamkey")
 }
 
 func TestProduceConsume(t *testing.T) {
@@ -32,8 +30,23 @@ func TestProduceConsume(t *testing.T) {
 
 	stream := "abcd"
 
-	p := Producer{Redis: &Redis{client: r, stream: stream}}
-	c := Consumer{Redis: &Redis{client: r, stream: stream}}
+	p, err := NewProducer("redis://somehost/1/streamkey")
+	assert.NoError(t, err)
+
+	c, err := NewConsumer("redis://somehost/1/streamkey")
+	assert.NoError(t, err)
+
+	if p, ok := p.(*RedisWriter); ok {
+		p.client = &redisClient{client: r, stream: stream}
+	} else {
+		t.Fatal("p is not a RedisWriter")
+	}
+
+	if c, ok := c.(*Consumer); ok {
+		c.redisClient = &redisClient{client: r, stream: stream}
+	} else {
+		t.Fatal("c is not a Consumer")
+	}
 
 	msgs := []string{"some message", "another message", "third"}
 
@@ -57,7 +70,7 @@ func TestProduceConsume(t *testing.T) {
 		Values: []string{"event_type", "disconnect"},
 	}).SetVal("OK")
 
-	err := p.Close()
+	err = p.Close()
 	assert.NoError(t, err)
 
 	// consume
@@ -78,7 +91,7 @@ func TestProduceConsume(t *testing.T) {
 	}
 
 	mock.ExpectXRead(&redis.XReadArgs{
-		Streams: []string{stream, c.lastMessageID},
+		Streams: []string{stream, "0"},
 		Block:   5 * time.Second,
 	}).SetVal([]redis.XStream{{
 		Stream:   stream,
@@ -88,7 +101,7 @@ func TestProduceConsume(t *testing.T) {
 	var data bytes.Buffer
 	bufsize := 5
 
-	n, err := io.CopyBuffer(&data, &c, make([]byte, bufsize))
+	n, err := io.CopyBuffer(&data, c, make([]byte, bufsize))
 	assert.NoError(t, err)
 	assert.Equal(t, len(expected), int(n))
 

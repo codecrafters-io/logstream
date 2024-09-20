@@ -12,7 +12,7 @@ import (
 
 type (
 	Consumer struct {
-		*Redis
+		redisClient *redisClient
 
 		lastMessageID string
 		eofReached    bool
@@ -22,14 +22,14 @@ type (
 	}
 )
 
-func NewConsumer(url string) (*Consumer, error) {
-	r, err := newRedis(url)
+func NewConsumer(streamUrl string) (io.ReadCloser, error) {
+	r, err := newRedisClient(streamUrl)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Consumer{
-		Redis:         r,
+		redisClient:   r,
 		lastMessageID: "0",
 	}, nil
 }
@@ -47,8 +47,8 @@ func (r *Consumer) Read(p []byte) (n int, err error) {
 
 	ctx := context.Background()
 
-	cmd := r.client.XRead(ctx, &redis.XReadArgs{
-		Streams: []string{r.stream, r.lastMessageID},
+	cmd := r.redisClient.client.XRead(ctx, &redis.XReadArgs{
+		Streams: []string{r.redisClient.stream, r.lastMessageID},
 		Block:   5 * time.Second,
 	})
 
@@ -95,6 +95,10 @@ streams:
 	}
 
 	return n, r.eof()
+}
+
+func (r *Consumer) Close() error {
+	return r.redisClient.close()
 }
 
 func (r *Consumer) eof() error {
