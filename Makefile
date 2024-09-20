@@ -3,7 +3,7 @@ next_patch_number := $(shell echo $$(($(current_patch_number)+1)))
 
 release:
 	git tag v0.2.$(next_patch_number)
-	git push origin master v0.2.$(next_patch_number)
+	git push origin main v0.2.$(next_patch_number)
 
 test:
 	REDIS_URL=redis://localhost:6379/testing go test -v ./...
