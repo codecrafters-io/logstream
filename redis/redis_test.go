@@ -18,10 +18,10 @@ import (
 var redisFlag = os.Getenv("REDIS_URL")
 
 func TestNewProducerConsumer(t *testing.T) {
-	p, err := NewProducer("redis://somehost/1/streamkey")
+	_, err := NewProducer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
 
-	c, err := NewConsumer("redis://somehost/1/streamkey")
+	_, err = NewConsumer("redis://somehost/1/streamkey")
 	assert.NoError(t, err)
 }
 
@@ -91,7 +91,7 @@ func TestProduceConsume(t *testing.T) {
 	}
 
 	mock.ExpectXRead(&redis.XReadArgs{
-		Streams: []string{stream, c.lastMessageID},
+		Streams: []string{stream, "0"},
 		Block:   5 * time.Second,
 	}).SetVal([]redis.XStream{{
 		Stream:   stream,
@@ -101,7 +101,7 @@ func TestProduceConsume(t *testing.T) {
 	var data bytes.Buffer
 	bufsize := 5
 
-	n, err := io.CopyBuffer(&data, &c, make([]byte, bufsize))
+	n, err := io.CopyBuffer(&data, c, make([]byte, bufsize))
 	assert.NoError(t, err)
 	assert.Equal(t, len(expected), int(n))
 
