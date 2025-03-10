@@ -6,13 +6,18 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/urfave/cli/v2"
 
 	"github.com/codecrafters-io/logstream/redis"
 )
+
+var defaultSentryDSN = "https://ed4462d1f05d4473bcc3726fc2379c47@o294739.ingest.sentry.io/4504746068082688"
 
 func main() {
 	followCmd := &cli.Command{
@@ -47,6 +52,11 @@ func main() {
 				Value: 2,
 				Usage: "max log size to stream, in MBs. Example: 2",
 			},
+			&cli.DurationFlag{
+				Name:  "sentry-flush-timeout",
+				Value: time.Second,
+				Usage: "max time to wait for sentry events flush at exit",
+			},
 			cli.HelpFlag,
 			cli.BashCompletionFlag,
 		},
@@ -55,7 +65,76 @@ func main() {
 	app.RunAndExitOnError()
 }
 
+func sentryInit(c *cli.Context, extra map[string]interface{}) func() {
+	dsn := envOr("SENTRY_DSN", defaultSentryDSN)
+	if dsn == "" {
+		return func() {}
+	}
+
+	beforeSend := func(ev *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		for k, v := range extra {
+			ev.Extra[k] = v
+		}
+
+		return ev
+	}
+
+	opts := sentry.ClientOptions{
+		Dsn:              dsn,
+		Debug:            os.Getenv("SENTRY_DEBUG") == "1",
+		TracesSampleRate: envFloatOr("SENTRY_SAMPLE_RATE", 1),
+		Release:          "unknown",
+		BeforeSend:       beforeSend,
+	}
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		opts.Release = info.Main.Version
+
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" {
+				opts.Release += "-" + s.Value
+			}
+		}
+	}
+
+	err := sentry.Init(opts)
+	_ = err // ignore
+
+	return func() {
+		to := c.Duration("sentry-flush-timeout")
+
+		sentry.Flush(to)
+	}
+}
+
+func sentryCatch(errptr *error) {
+	if p := recover(); p != nil {
+		sentry.CurrentHub().Recover(p)
+
+		panic(p)
+	}
+
+	if *errptr == nil {
+		return
+	}
+
+	err := *errptr
+
+	var code *exec.ExitError
+	if errors.As(err, &code) {
+		return
+	}
+
+	sentry.CurrentHub().CaptureException(err)
+}
+
 func follow(c *cli.Context) (err error) {
+	defer sentryInit(c, map[string]interface{}{
+		"command": "follow",
+		"redis":   c.String("url"),
+	})()
+	defer sentryCatch(&err)
+
 	r, err := redis.NewConsumer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
@@ -77,6 +156,12 @@ func follow(c *cli.Context) (err error) {
 }
 
 func appendRun(c *cli.Context) (err error) {
+	defer sentryInit(c, map[string]interface{}{
+		"command": "append",
+		"redis":   c.String("url"),
+	})()
+	defer sentryCatch(&err)
+
 	r, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
@@ -98,6 +183,13 @@ func appendRun(c *cli.Context) (err error) {
 }
 
 func run(c *cli.Context) (err error) {
+	defer sentryInit(c, map[string]interface{}{
+		"command":      "run",
+		"redis":        c.String("url"),
+		"exec_command": c.Args().Slice(),
+	})()
+	defer sentryCatch(&err)
+
 	r, err := redis.NewProducer(c.String("url"))
 	if err != nil {
 		return fmt.Errorf("new redis client: %w", err)
@@ -191,4 +283,27 @@ func execBash(c *cli.Context) *exec.Cmd {
 
 func execNative(c *cli.Context) *exec.Cmd {
 	return exec.Command(c.Args().First(), c.Args().Tail()...)
+}
+
+func envOr(name, defaultVal string) string {
+	v, ok := os.LookupEnv(name)
+	if ok {
+		return v
+	}
+
+	return defaultVal
+}
+
+func envFloatOr(name string, defaultVal float64) float64 {
+	v, ok := os.LookupEnv(name)
+	if !ok {
+		return defaultVal
+	}
+
+	x, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return defaultVal
+	}
+
+	return x
 }

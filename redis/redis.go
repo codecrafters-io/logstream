@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -17,6 +18,10 @@ type (
 )
 
 func newRedis(urlStream string) (*Redis, error) {
+	if urlStream == "" {
+		return nil, errors.New("empty url")
+	}
+
 	u, err := url.Parse(urlStream)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
